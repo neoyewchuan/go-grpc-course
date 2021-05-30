@@ -53,7 +53,23 @@ message DivRequest {
 }
 
 message DivResponse {
-    float div_result = 1;
+    double div_result = 1;
+}
+
+message PrimeNumberDecompositionRequest {
+    int64 number = 1;
+}
+
+message PrimeNumberDecompositionResponse {
+    int64 prime_factor = 1;
+}
+
+message ComputeAverageRequest {
+    int32 number = 1;
+}
+
+message ComputeAverageResponse {
+    double result = 1;
 }
 
 service CalculatorService {
@@ -61,4 +77,8 @@ service CalculatorService {
     rpc Sub(SubRequest) returns (SubResponse) {}
     rpc Mul(MulRequest) returns (MulResponse) {}
     rpc Div(DivRequest) returns (DivResponse) {}
+
+    rpc PrimeNumberDecomposition(PrimeNumberDecompositionRequest) returns (stream PrimeNumberDecompositionResponse){}
+
+    rpc ComputeAverage(stream ComputeAverageRequest) returns (ComputeAverageResponse) {}
 }

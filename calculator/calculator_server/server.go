@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 
-	"github.com/neoyewchuan/go-grpc-course/calculator/calculatorpb"
 	"google.golang.org/grpc"
+
+	"github.com/neoyewchuan/go-grpc-course/calculator/calculatorpb"
 )
 
 type server struct{}
@@ -49,16 +51,56 @@ func (*server) Div(ctx context.Context, req *calculatorpb.DivRequest) (*calculat
 	fmt.Printf("Div function was invoked with: %v\n", req)
 	value1 := req.GetDiv().GetFirstNumber()
 	value2 := req.GetDiv().GetSecondNumber()
-	var result float32
+	var result float64
 	if value2 == 0 {
 		result = 0.00
 	} else {
-		result = float32(value1 / value2)
+		result = float64(value1) / float64(value2)
 	}
 	res := &calculatorpb.DivResponse{
 		DivResult: result,
 	}
 	return res, nil
+}
+
+func (*server) PrimeNumberDecomposition(req *calculatorpb.PrimeNumberDecompositionRequest, stream calculatorpb.CalculatorService_PrimeNumberDecompositionServer) error {
+	fmt.Printf("PrimeNumberDecomposition function was invoked with: %v\n", req)
+	number := req.GetNumber()
+	primefactor := int64(2)
+	for number > 1 {
+		if number%primefactor == 0 {
+			stream.Send(&calculatorpb.PrimeNumberDecompositionResponse{
+				PrimeFactor: primefactor,
+			})
+			number /= primefactor
+		} else {
+			primefactor++
+		}
+	}
+
+	return nil
+}
+
+func (*server) ComputeAverage(stream calculatorpb.CalculatorService_ComputeAverageServer) error {
+	fmt.Println("ComputeAverage function was invoked with a streaming request..")
+	counter := 0
+	sumtotal := int32(0)
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			// we have reading the client stream
+			average := float64(sumtotal) / float64(counter)
+			return stream.SendAndClose(&calculatorpb.ComputeAverageResponse{
+				Result: average,
+			})
+		}
+		if err != nil {
+			log.Fatalf("error while reading client stream: %v", err)
+		}
+		counter++
+		sumtotal += req.GetNumber()
+
+	}
 }
 
 func main() {
