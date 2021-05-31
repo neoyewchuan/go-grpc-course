@@ -5,18 +5,38 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 
 	"github.com/neoyewchuan/go-grpc-course/greet/greetpb"
 )
 
+// ignoreCN disables interpreting Common Name as a hostname. See issue 24151.
+var ignoreCN = !strings.Contains(os.Getenv("GODEBUG"), "x509ignoreCN=0")
+
 func main() {
 	fmt.Println("Hello I'm a client...")
-	cc, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
+
+	tls := true
+	opts := grpc.WithInsecure()
+	if tls {
+		certFile := "./ssl/ca.crt" // CA trust certificate
+
+		creds, sslErr := credentials.NewClientTLSFromFile(certFile, "")
+		if sslErr != nil {
+			log.Fatalf("Error while loading CA trust certificate: %v", sslErr)
+			return
+		}
+		opts = grpc.WithTransportCredentials(creds)
+	}
+	cc, err := grpc.Dial("localhost:50051", opts)
+	//cc, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("could not connect: %v", err)
 	}
@@ -25,14 +45,14 @@ func main() {
 
 	c := greetpb.NewGreetServiceClient(cc)
 	//fmt.Printf("Created client: %f", c)
-	//doUnary(c)
 
+	doUnary(c)
 	//doServerStreaming(c)
 	//doClientStreaming(c)
 	//doBiDiStreaming(c)
 
-	doUnaryWithDeadline(c, &greetpb.Greeting{FirstName: "Peter", LastName: "Parker"}, 1*time.Second) // should timeout
-	doUnaryWithDeadline(c, &greetpb.Greeting{FirstName: "Harry", LastName: "Potter"}, 5*time.Second) // should complete
+	//doUnaryWithDeadline(c, &greetpb.Greeting{FirstName: "Peter", LastName: "Parker"}, 1*time.Second) // should timeout
+	//doUnaryWithDeadline(c, &greetpb.Greeting{FirstName: "Harry", LastName: "Potter"}, 5*time.Second) // should complete
 }
 
 func doUnary(c greetpb.GreetServiceClient) {
