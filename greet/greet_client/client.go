@@ -47,12 +47,12 @@ func main() {
 	//fmt.Printf("Created client: %f", c)
 
 	doUnary(c)
-	//doServerStreaming(c)
-	//doClientStreaming(c)
-	//doBiDiStreaming(c)
+	doServerStreaming(c)
+	doClientStreaming(c)
+	doBiDiStreaming(c)
 
-	//doUnaryWithDeadline(c, &greetpb.Greeting{FirstName: "Peter", LastName: "Parker"}, 1*time.Second) // should timeout
-	//doUnaryWithDeadline(c, &greetpb.Greeting{FirstName: "Harry", LastName: "Potter"}, 5*time.Second) // should complete
+	doUnaryWithDeadline(c, &greetpb.Greeting{FirstName: "Peter", LastName: "Parker"}, 1*time.Second) // should timeout
+	doUnaryWithDeadline(c, &greetpb.Greeting{FirstName: "Harry", LastName: "Potter"}, 5*time.Second) // should complete
 }
 
 func doUnary(c greetpb.GreetServiceClient) {
