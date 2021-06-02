@@ -22,6 +22,10 @@ import (
 
 var collection *mongo.Collection
 
+//var client *mongo.Client
+
+//var ctx = context.TODO()
+
 type server struct{}
 
 type blogItem struct {
@@ -30,6 +34,26 @@ type blogItem struct {
 	Content  string             `bson: "content"`
 	Title    string             `bson: "title"`
 }
+
+// func init() {
+// 	// if we crash the go code, we get the file name and line number
+// 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+// 	fmt.Println("Connecting to MongoDB...")
+// 	// connect to MongoDB
+// 	//client, err := mongo.NewClient("mongodb://localhost:27017")
+// 	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017/")
+// 	client, err := mongo.Connect(context.TODO(), clientOptions)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+// 	err = client.Ping(context.TODO(), nil)
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
+
+// 	collection = client.Database("mydb").Collection("blog")
+// }
 
 func (*server) CreateBlog(ctx context.Context, req *blogpb.CreateBlogRequest) (*blogpb.CreateBlogResponse, error) {
 	fmt.Println("Create Blog request...")
@@ -94,17 +118,132 @@ func (*server) ReadBlog(ctx context.Context, req *blogpb.ReadBlogRequest) (*blog
 	}
 
 	return &blogpb.ReadBlogResponse{
-		Blog: &blogpb.Blog{
-			Id:       data.ID.Hex(),
-			AuthorId: data.AuthorID,
-			Content:  data.Content,
-			Title:    data.Title,
-		},
+		Blog: dataToBlogPB(data),
 	}, nil
 
 }
 
+func (*server) UpdateBlog(ctx context.Context, req *blogpb.UpdateBlogRequest) (*blogpb.UpdateBlogResponse, error) {
+	fmt.Println("Update blog request...")
+	blog := req.GetBlog()
+	objID, err := primitive.ObjectIDFromHex(blog.GetId())
+	if err != nil {
+		return nil, status.Errorf(
+			codes.InvalidArgument,
+			fmt.Sprintf("Cannot parse ID"),
+		)
+	}
+
+	data := &blogItem{}
+	filter := &bson.M{
+		"_id": objID,
+	}
+
+	res := collection.FindOne(context.Background(), filter)
+	if err := res.Decode(data); err != nil {
+		return nil, status.Errorf(
+			codes.NotFound,
+			fmt.Sprintf("Cannot find blog with specific ID: %v", err),
+		)
+	}
+
+	data.Content = blog.GetContent()
+	data.Title = blog.GetTitle()
+	data.AuthorID = blog.GetAuthorId()
+
+	_, updErr := collection.ReplaceOne(context.Background(), filter, data)
+	if updErr != nil {
+		return nil, status.Errorf(
+			codes.Internal,
+			fmt.Sprintf("Cannot update object in MongoDB: %v", updErr),
+		)
+	}
+
+	return &blogpb.UpdateBlogResponse{
+		Blog: dataToBlogPB(data),
+	}, nil
+}
+
+func (*server) DeleteBlog(ctx context.Context, req *blogpb.DeleteBlogRequest) (*blogpb.DeleteBlogResponse, error) {
+	fmt.Println("Delete blog request...")
+	blogId := req.GetBlogId()
+
+	objId, err := primitive.ObjectIDFromHex(blogId)
+	if err != nil {
+		return nil, status.Errorf(
+			codes.InvalidArgument,
+			fmt.Sprintf("Cannot parse ID"),
+		)
+	}
+	// create an empty struct
+	filter := &bson.M{
+		"_id": objId,
+	}
+
+	res, err := collection.DeleteOne(context.Background(), filter)
+	if err != nil {
+		return nil, status.Errorf(
+			codes.Internal,
+			fmt.Sprintf("Error while deleting object in MongoDB: %v", err),
+		)
+	}
+
+	if res.DeletedCount == 0 {
+		return nil, status.Errorf(
+			codes.NotFound,
+			fmt.Sprintf("Cannot find object in MongoDB: %v", err),
+		)
+	}
+
+	return &blogpb.DeleteBlogResponse{
+		BlogId: blogId,
+	}, nil
+}
+
+func dataToBlogPB(data *blogItem) *blogpb.Blog {
+	return &blogpb.Blog{
+		Id:       data.ID.Hex(),
+		AuthorId: data.AuthorID,
+		Content:  data.Content,
+		Title:    data.Title,
+	}
+}
+
+func (*server) ListBlog(req *blogpb.ListBlogRequest, stream blogpb.BlogService_ListBlogServer) error {
+	fmt.Println("List Blog request....")
+
+	cur, err := collection.Find(context.Background(), bson.D{})
+	if err != nil {
+		return status.Errorf(
+			codes.Internal,
+			fmt.Sprintf("Unknown internal error: %v", err),
+		)
+	}
+	defer cur.Close(context.Background())
+
+	for cur.Next(context.Background()) {
+		data := &blogItem{}
+		err := cur.Decode(data)
+		if err != nil {
+			return status.Errorf(
+				codes.Internal,
+				fmt.Sprintf("Error while decoding data from MongoDB: %v", err),
+			)
+		}
+		stream.Send(&blogpb.ListBlogResponse{Blog: dataToBlogPB(data)})
+	}
+	if err := cur.Err(); err != nil {
+		return status.Errorf(
+			codes.Internal,
+			fmt.Sprintf("Unknown internal error: %v", err),
+		)
+	}
+	return nil
+
+}
+
 func main() {
+
 	// if we crash the go code, we get the file name and line number
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
@@ -116,10 +255,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// err = client.Connect(context.TODO())
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	err = client.Ping(context.TODO(), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	collection = client.Database("mydb").Collection("blog")
 
